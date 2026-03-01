@@ -465,6 +465,7 @@
       
       // Deal cards one by one
       const dealtCardsContainer = document.getElementById('dealtCardsContainer');
+      const currentDealtCards = []; // Array to store the exact cards for the static snapshot
       
       for (let i = 0; i < categoryOrder.length; i++) {
         const catKey = categoryOrder[i];
@@ -482,8 +483,9 @@
           attempts++;
         } while (usedCards.has(cardKey) && attempts < 10);
         
-        // Mark this card as used
+        // Mark this card as used and store it for export
         usedCards.add(cardKey);
+        currentDealtCards.push({ category, card: randomCard });
         
         await delay(250);
         
@@ -491,9 +493,9 @@
         dealtCardsContainer.appendChild(cardElement);
       }
       
-      // Auto-capture screenshot after all cards are dealt and animation finishes
-      await delay(1500); 
-      captureCards();
+      // Wait for all UI animations to completely finish, then take the clean snapshot
+      await delay(2000); 
+      captureCards(currentDealtCards);
     }
     
     function createDealtCard(category, card) {
@@ -508,23 +510,57 @@
       return div;
     }
     
-    async function captureCards() {
-      const cardsContainer = document.getElementById('dealtCardsContainer');
+    async function captureCards(cardsToExport) {
       const teamName = teams[currentTeamIndex];
       
+      // Create an off-screen container for a clean, static, perfectly-formatted export
+      const exportDiv = document.createElement('div');
+      exportDiv.style.position = 'absolute';
+      exportDiv.style.left = '-9999px';
+      exportDiv.style.top = '0';
+      exportDiv.style.width = '700px'; // Fixed width so it always looks exactly the same
+      exportDiv.className = 'parchment-bg rounded-xl p-8 vintage-border text-white';
+      
+      let cardsHtml = '';
+      cardsToExport.forEach(item => {
+        cardsHtml += `
+          <div class="${item.category.color} rounded-lg p-4 mb-3 vintage-border" style="border: 2px solid #8B5A2B;">
+            <p class="text-amber-300 text-xs font-semibold tracking-widest uppercase mb-1">${item.category.title}</p>
+            <h4 class="title-font text-2xl font-bold text-amber-100 mb-1">${item.card.title}</h4>
+            <p class="text-amber-200 text-base">${item.card.desc}</p>
+          </div>
+        `;
+      });
+
+      exportDiv.innerHTML = `
+        <div class="text-center mb-6">
+          <h2 class="title-font text-4xl font-bold text-amber-900 mb-2">The Investigation Board</h2>
+          <h3 class="title-font text-2xl text-amber-800 italic">Ingredients for: ${teamName}</h3>
+        </div>
+        <div class="flex flex-col gap-1">
+          ${cardsHtml}
+        </div>
+      `;
+      
+      // Temporarily append to body to allow html2canvas to read the computed styles
+      document.body.appendChild(exportDiv);
+      
       try {
-        const canvas = await html2canvas(cardsContainer, {
-          backgroundColor: '#f5e6d3',
-          scale: 2,
+        const canvas = await html2canvas(exportDiv, {
+          backgroundColor: '#f5e6d3', // Match the parchment background
+          scale: 2,                   // High resolution
           logging: false
         });
         
         const link = document.createElement('a');
-        link.download = `${teamName}.png`; // Se usa exactamente el nombre del equipo
+        link.download = `${teamName}.png`; 
         link.href = canvas.toDataURL('image/png');
         link.click();
       } catch (error) {
         console.error('Capture failed:', error);
+      } finally {
+        // Clean up the hidden element
+        document.body.removeChild(exportDiv);
       }
     }
     
